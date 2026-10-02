@@ -40,7 +40,7 @@ targets = [
 ]
 
 calibration_map = np.column_stack([xx.ravel(), yy.ravel()])
-n_points = min(len(calibration_map),25)
+n_points = len(calibration_map)
 np.random.shuffle(calibration_map)
 gestures.uploadCalibrationMap(calibration_map,context="my_context")
 gestures.setFixation(1.0)
@@ -74,7 +74,7 @@ while running:
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     # frame = np.rot90(frame)
-    frame = np.flip(frame, axis=1)
+    #frame = np.flip(frame, axis=1)
     calibrate = (iterator <= n_points) # calibrate 25 points
     event, calibration = gestures.step(frame, calibrate, screen_width, screen_height, context="my_context")
 
