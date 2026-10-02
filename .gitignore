@@ -16,3 +16,5 @@ data/*
 /engine/target
 .envrc
 .direnv
+.venv/
+.idea/
