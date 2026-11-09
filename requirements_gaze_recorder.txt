@@ -1,0 +1,7 @@
+eyeGestures<4
+mediapipe==0.10.21
+numpy==1.26.4
+opencv-contrib-python==4.11.0.86
+pygame==2.6.1
+scikit-learn==1.7.0
+scipy==1.15.3

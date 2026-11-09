@@ -28,8 +28,14 @@ import datetime as dt
 import json
 import os
 import re
+import subprocess
 import sys
 import time
+
+if __name__ == "__main__" and os.environ.get("EYEGESTURES_RECORDER_MANAGED") != "1":
+    _root = os.path.dirname(os.path.abspath(__file__))
+    _launcher = os.path.join(_root, "run_gaze_recorder.py")
+    raise SystemExit(subprocess.run([sys.executable, _launcher, *sys.argv[1:]], cwd=_root).returncode)
 
 import cv2
 import numpy as np
