@@ -25,6 +25,7 @@ import os
 import matplotlib
 import numpy as np
 from scipy.ndimage import gaussian_filter
+from matplotlib.patches import Rectangle
 
 
 def screen_size():
@@ -49,31 +50,71 @@ def load_points(path, start=None, end=None):
     return x[keep], y[keep]
 
 
-def make_heatmap(x, y, width, height, sigma):
-    inside = (x >= 0) & (x < width) & (y >= 0) & (y < height)
-    heat, _, _ = np.histogram2d(y[inside], x[inside], bins=(height, width),
-                                range=((0, height), (0, width)))
+def heatmap_bounds(x, y, width, height, pad):
+    valid = np.isfinite(x) & np.isfinite(y)
+    if not valid.any():
+        return 0, width, 0, height
+
+    xmin = int(np.floor(min(0, np.min(x[valid]) - pad)))
+    xmax = int(np.ceil(max(width, np.max(x[valid]) + pad)))
+    ymin = int(np.floor(min(0, np.min(y[valid]) - pad)))
+    ymax = int(np.ceil(max(height, np.max(y[valid]) + pad)))
+    return xmin, xmax, ymin, ymax
+
+
+def make_heatmap(x, y, width, height, sigma, bounds):
+    xmin, xmax, ymin, ymax = bounds
+    valid = np.isfinite(x) & np.isfinite(y)
+    x, y = x[valid], y[valid]
+
+    heat, _, _ = np.histogram2d(
+        y, x,
+        bins=(ymax - ymin, xmax - xmin),
+        range=((ymin, ymax), (xmin, xmax)),
+    )
     heat = gaussian_filter(heat, sigma)
     if heat.max() > 0:
         heat /= heat.max()
-    return heat, int(inside.sum()), len(x)
+
+    on_screen = (x >= 0) & (x < width) & (y >= 0) & (y < height)
+    return heat, int(on_screen.sum()), len(x)
 
 
-def save_heatmap(heat, out, title, background, width, height, show):
+def save_heatmap(heat, out, title, background, width, height, show, bounds):
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
 
+    xmin, xmax, ymin, ymax = bounds
+    extent = (xmin, xmax, ymax, ymin)
     dpi = 100
-    fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
+
+    fig = plt.figure(
+        figsize=((xmax - xmin) / dpi, (ymax - ymin) / dpi),
+        dpi=dpi
+    )
     ax = fig.add_axes((0, 0, 1, 1))
     ax.set_axis_off()
+
     if background is not None:
         ax.imshow(background, extent=(0, width, height, 0))
         masked = np.ma.masked_less(heat, 0.02)
-        ax.imshow(masked, cmap="jet", alpha=0.55, extent=(0, width, height, 0), vmin=0, vmax=1)
+        ax.imshow(masked, cmap="jet", alpha=0.55, extent=extent, vmin=0, vmax=1)
     else:
-        ax.imshow(heat, cmap="inferno", extent=(0, width, height, 0), vmin=0, vmax=1)
+        ax.imshow(heat, cmap="inferno", extent=extent, vmin=0, vmax=1)
+
+    # Outline the original screen, not the expanded heatmap area.
+    ax.add_patch(Rectangle(
+        (0, 0), width, height,
+        linewidth=1, edgecolor="gray", facecolor="none", zorder=5
+    ))
+
     ax.text(10, 30, title, color="white", fontsize=14,
-            bbox=dict(facecolor="black", alpha=0.5, edgecolor="none"))
+            bbox=dict(facecolor="black", alpha=0.5, edgecolor="none"),
+            zorder=6)
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymax, ymin)
+
     fig.savefig(out, dpi=dpi)
     print(f"Saved {out}")
     if show:
@@ -129,15 +170,19 @@ def main():
     for group in groups:
         xs, ys = zip(*(load_points(f, args.start, args.end) for f in group))
         x, y = np.concatenate(xs), np.concatenate(ys)
-        heat, used, total = make_heatmap(x, y, width, height, args.sigma)
+
+        bounds = heatmap_bounds(x, y, width, height, pad=3*args.sigma)
+        heat, used, total = make_heatmap(x, y, width, height, args.sigma, bounds)
+
         if len(group) == 1:
             name = os.path.basename(group[0]).replace("_gaze.csv", "")
             out = args.out if (args.out and not args.separate) else os.path.splitext(group[0])[0].replace("_gaze", "") + "_heatmap.png"
         else:
             name = f"{len(group)} recordings combined"
             out = args.out or os.path.join(os.path.dirname(group[0]), "combined_heatmap.png")
+            
         print(f"{name}: {used} of {total} samples on screen")
-        save_heatmap(heat, out, f"{name}  ({used} samples)", background, width, height, args.show)
+        save_heatmap(heat, out, f"{name}  ({used} samples)", background, width, height, args.show, bounds)
 
 
 if __name__ == "__main__":
